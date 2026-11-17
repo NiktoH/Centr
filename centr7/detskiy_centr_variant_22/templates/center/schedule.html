@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Расписание занятий{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">План занятий</span><h1>Расписание</h1><p>Занятия в группах, в которых состоят ваши дети.</p></div></div>
+<div class="content-panel">
+{% for lesson in lessons %}
+<div class="schedule-row"><div class="date-box"><strong>{{ lesson.lessons__starts_at|date:"d" }}</strong><span>{{ lesson.lessons__starts_at|date:"M" }}</span></div><div><strong>{{ lesson.title }}</strong><span>{{ lesson.lessons__starts_at|date:"d.m.Y, H:i" }}–{{ lesson.lessons__ends_at|date:"H:i" }}</span><small>{{ lesson.lessons__classroom__name }}{% if lesson.lessons__topic %} · {{ lesson.lessons__topic }}{% endif %}</small></div></div>
+{% empty %}<p>Пока нет запланированных занятий.</p>{% endfor %}
+</div>
+{% endblock %}

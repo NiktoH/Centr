@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Мои дети{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">Личный кабинет</span><h1>Мои дети</h1><p>Управляйте профилями детей и их данными.</p></div><a class="button" href="{% url 'child_create' %}">Добавить ребёнка</a></div>
+<form class="filter-panel" method="get">
+    <input type="search" name="q" placeholder="Поиск по имени или фамилии" value="{{ term }}">
+    <input type="number" name="age" min="0" max="18" placeholder="Возраст не старше" value="{{ request.GET.age }}">
+    <select name="has_group"><option value="">Все профили</option><option value="yes" {% if request.GET.has_group == 'yes' %}selected{% endif %}>Есть запись в группу</option><option value="no" {% if request.GET.has_group == 'no' %}selected{% endif %}>Без группы</option></select>
+    <select name="sort"><option value="last_name">По фамилии</option><option value="first_name">По имени</option><option value="-created_at">Сначала новые</option></select>
+    <button class="button" type="submit">Применить</button>
+</form>
+<div class="content-panel">
+{% for child in page %}
+<div class="child-row"><div class="avatar">{% if child.photo %}<img src="{{ child.photo.url }}" alt="">{% else %}{{ child.first_name|first }}{% endif %}</div><div class="child-info"><strong>{{ child.last_name }} {{ child.first_name }}</strong><span>{{ child.age }} лет · {{ child.birth_date|date:"d.m.Y" }}</span></div><a class="text-link" href="{% url 'child_update' child.pk %}">Изменить</a><form method="post" action="{% url 'child_delete' child.pk %}" class="inline-form" onsubmit="return confirm('Удалить профиль ребёнка?')">{% csrf_token %}<button class="danger-link">Удалить</button></form></div>
+{% empty %}<p>По заданным условиям профили не найдены.</p>{% endfor %}
+</div>
+{% if page.paginator.num_pages > 1 %}<div class="pagination">{% if page.has_previous %}<a href="?{{ params }}&page={{ page.previous_page_number }}">← Назад</a>{% endif %}<span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?{{ params }}&page={{ page.next_page_number }}">Вперёд →</a>{% endif %}</div>{% endif %}
+{% endblock %}

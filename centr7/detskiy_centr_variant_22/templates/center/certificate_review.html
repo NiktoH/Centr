@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Проверка справок{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">Рабочее место администратора</span><h1>Медицинские справки</h1><p>Подтверждение справок возвращает пропущенное занятие на баланс абонемента.</p></div></div>
+<div class="content-panel">
+{% for certificate in certificates %}
+<div class="certificate-row"><div><strong>{{ certificate.attendance.child }}</strong><span>{{ certificate.illness_from|date:"d.m.Y" }} — {{ certificate.illness_to|date:"d.m.Y" }}</span><small>{{ certificate.get_status_display }} · {{ certificate.parent_comment }}</small><a class="text-link" href="{{ certificate.file.url }}" target="_blank">Открыть файл</a></div>
+{% if certificate.status == 'pending' %}<div class="actions"><form method="post" action="{% url 'certificate_action' certificate.pk 'approve' %}">{% csrf_token %}<button class="button" type="submit">Подтвердить</button></form><form method="post" action="{% url 'certificate_action' certificate.pk 'reject' %}">{% csrf_token %}<button class="button button-danger" type="submit">Отклонить</button></form></div>{% endif %}</div>
+{% empty %}<p>Справок пока нет.</p>{% endfor %}
+</div>
+{% endblock %}

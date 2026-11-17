@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Мои записи в группы{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">Личный кабинет</span><h1>Мои записи в группы</h1><p>Просматривайте и изменяйте занятия, на которые записаны дети.</p></div><a class="button" href="{% url 'enroll' %}">Новая запись</a></div>
+<div class="content-panel">
+{% for enrollment in enrollments %}
+<div class="child-row">
+    <div class="avatar">{{ enrollment.child.first_name|first }}</div>
+    <div class="child-info">
+        <strong>{{ enrollment.child }} — {{ enrollment.group.title }}</strong>
+        <span>{{ enrollment.group.club.name }} · {{ enrollment.group.age_range.min_age }}–{{ enrollment.group.age_range.max_age }} лет</span>
+        <small>{% if enrollment.is_active %}Активная запись{% else %}Запись закрыта{% endif %}</small>
+    </div>
+    <a class="text-link" href="{% url 'enrollment_update' enrollment.pk %}">Изменить</a>
+    <form method="post" action="{% url 'enrollment_delete' enrollment.pk %}" class="inline-form" onsubmit="return confirm('Удалить запись в группу?')">{% csrf_token %}<button class="danger-link" type="submit">Удалить</button></form>
+</div>
+{% empty %}<p>Записей пока нет.</p>{% endfor %}
+</div>
+{% endblock %}

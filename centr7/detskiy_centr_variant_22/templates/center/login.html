@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Вход{% endblock %}
+{% block content %}
+<div class="form-card narrow"><span class="eyebrow">Личный кабинет</span><h1>Войти</h1>
+<form method="post">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Войти</button></form>
+<p class="form-note">Нет аккаунта? <a href="{% url 'register' %}">Зарегистрироваться</a></p></div>
+{% endblock %}

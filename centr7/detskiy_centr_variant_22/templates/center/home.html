@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Детский развивающий центр{% endblock %}
+{% block content %}
+<section class="hero">
+    <div class="hero-copy">
+        <span class="eyebrow">Пространство для развития</span>
+        <h1>Помогаем детям открывать свои таланты</h1>
+        <p>Кружки, занятия и мастер-классы для детей разных возрастов. Выберите направление и запишите ребёнка онлайн.</p>
+        <div class="hero-actions"><a class="button" href="{% url 'club_list' %}">Выбрать кружок</a><a class="button button-light" href="{% url 'register' %}">Кабинет родителя</a></div>
+    </div>
+    <div class="hero-art"><div class="art-card art-one">✦<span>Творчество</span></div><div class="art-card art-two">⌘<span>Робототехника</span></div><div class="art-card art-three">♟<span>Шахматы</span></div></div>
+</section>
+<section class="section-heading"><div><span class="eyebrow">Наши направления</span><h2>Кружки центра</h2></div><a class="text-link" href="{% url 'club_list' %}">Все кружки →</a></section>
+<div class="card-grid">
+    {% for club in clubs %}
+    <article class="club-card">
+        {% if club.image %}<img src="{{ club.image.url }}" alt="{{ club.name }}">{% else %}<div class="club-placeholder">✦</div>{% endif %}
+        <div class="card-body"><span class="tag">{{ club.direction }}</span><h3>{{ club.name }}</h3><p>{{ club.description|truncatechars:110 }}</p></div>
+    </article>
+    {% empty %}<p>Направления скоро появятся.</p>{% endfor %}
+</div>
+{% endblock %}

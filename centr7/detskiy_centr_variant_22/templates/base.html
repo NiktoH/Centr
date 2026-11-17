@@ -1,0 +1,37 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Детский центр{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="{% static 'js/main.js' %}" defer></script>
+</head>
+<body>
+<header class="site-header">
+    <div class="container nav-wrap">
+        <a class="brand" href="{% url 'home' %}">Растём вместе</a>
+        <nav>
+            <a href="{% url 'club_list' %}">Кружки</a>
+            {% if user.is_authenticated %}
+                <a href="{% url 'dashboard' %}">Кабинет</a>
+                <a href="{% url 'child_list' %}">Мои дети</a>
+                <a href="{% url 'enrollment_list' %}">Мои записи</a>
+                <a href="{% url 'schedule' %}">Расписание</a>
+                {% if user.is_staff %}<a href="{% url 'certificate_review' %}">Справки</a>{% endif %}
+                <form class="inline-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="nav-button">Выйти</button></form>
+            {% else %}
+                <a href="{% url 'login' %}">Войти</a>
+                <a class="nav-cta" href="{% url 'register' %}">Регистрация</a>
+            {% endif %}
+        </nav>
+    </div>
+</header>
+<main class="container main-content">
+    {% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+</main>
+<footer><div class="container">Детский развивающий центр «Растём вместе»</div></footer>
+</body>
+</html>
