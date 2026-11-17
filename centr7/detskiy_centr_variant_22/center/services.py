@@ -2,25 +2,35 @@ from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
-from .models import Attendance, Enrollment, MedicalCertificate, Subscription
+from .models import Attendance, Enrollment, MedicalCertificate, Subscription, StudyGroup
 
 
 @transaction.atomic
 def enroll_child(child, group):
-    child = type(child).objects.select_for_update().get(pk=child.pk)
-    group = type(group).objects.select_for_update().select_related("age_range").get(pk=group.pk)
-    if not group.is_active:
-        raise ValidationError("Набор в эту группу закрыт.")
-    if not group.age_range.min_age <= child.age <= group.age_range.max_age:
+    locked_group = StudyGroup.objects.select_for_update().select_related("age_range").get(pk=group.pk)
+
+    if not locked_group.is_active:
+        raise ValidationError("Набор в выбранную группу закрыт.")
+
+    min_age = locked_group.age_range.min_age
+    max_age = locked_group.age_range.max_age
+    if not (min_age <= child.age <= max_age):
         raise ValidationError(
-            f"Возраст ребёнка — {child.age} лет. Для группы требуется от "
-            f"{group.age_range.min_age} до {group.age_range.max_age} лет."
+            f"Возраст ребёнка ({child.age} лет) не соответствует требованиям группы ({min_age}–{max_age} лет)."
         )
-    if Enrollment.objects.filter(child=child, group=group, is_active=True).exists():
-        raise ValidationError("Ребёнок уже записан в эту группу.")
-    if group.enrollments.filter(is_active=True).count() >= group.capacity:
-        raise ValidationError("В группе нет свободных мест.")
-    return Enrollment.objects.create(child=child, group=group)
+
+    if Enrollment.objects.filter(child=child, group=locked_group, is_active=True).exists():
+        raise ValidationError("Этот ребёнок уже записан в данную группу.")
+
+    if locked_group.free_places <= 0:
+        raise ValidationError("В выбранной группе не осталось свободных мест.")
+
+    enrollment, created = Enrollment.objects.update_or_create(
+        child=child,
+        group=locked_group,
+        defaults={"is_active": True},
+    )
+    return enrollment
 
 
 @transaction.atomic

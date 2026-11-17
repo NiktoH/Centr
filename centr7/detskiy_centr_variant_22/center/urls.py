@@ -1,33 +1,34 @@
-from django.http import HttpResponse
+from django.contrib.auth import views as auth_views
 from django.urls import path
 from . import views
 
-
-def stub_view(request, *args, **kwargs):
-    return HttpResponse("Раздел в разработке (будет реализован на следующем занятии).")
-
+app_name = "center"
 
 urlpatterns = [
     path("", views.home, name="home"),
     path("clubs/", views.club_list, name="club_list"),
-    path("register/", stub_view, name="register"),
-    path("login/", stub_view, name="login"),
-    path("logout/", stub_view, name="logout"),
-    path("password-change/", stub_view, name="password_change"),
-    path("dashboard/", stub_view, name="dashboard"),
-    path("children/", stub_view, name="child_list"),
-    path("children/add/", stub_view, name="child_create"),
-    path("children/<int:pk>/edit/", stub_view, name="child_update"),
-    path("children/<int:pk>/delete/", stub_view, name="child_delete"),
-    path("children/export/", stub_view, name="export_children"),
-    path("enrollments/", stub_view, name="enrollment_list"),
-    path("enrollments/new/", stub_view, name="enroll"),
-    path("enrollments/<int:pk>/edit/", stub_view, name="enrollment_update"),
-    path("enrollments/<int:pk>/delete/", stub_view, name="enrollment_delete"),
-    path("schedule/", stub_view, name="schedule"),
-    path("certificates/upload/", stub_view, name="certificate_create"),
-    path("staff/certificates/", stub_view, name="certificate_review"),
-    path("staff/certificates/<int:pk>/<str:action>/", stub_view, name="certificate_action"),
-    path("api/attendance/", stub_view, name="attendance_data"),
-    path("api/groups/", stub_view, name="group_catalog_json"),
+    path("register/", views.register, name="register"),
+    path("login/", auth_views.LoginView.as_view(template_name="center/login.html"), name="login"),
+    path("logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path(
+        "password-change/",
+        auth_views.PasswordChangeView.as_view(
+            template_name="center/form.html",
+            extra_context={"title": "Смена пароля"},
+            success_url="/dashboard/",
+        ),
+        name="password_change",
+    ),
+    path("dashboard/", views.dashboard, name="dashboard"),
+    path("children/", views.child_list, name="child_list"),
+    path("children/add/", views.child_create, name="child_create"),
+    path("children/<int:pk>/edit/", views.child_update, name="child_update"),
+    path("children/<int:pk>/delete/", views.child_delete, name="child_delete"),
+    path("children/export/", views.export_children, name="export_children"),
+    path("enrollments/", views.enrollment_list, name="enrollment_list"),
+    path("enrollments/new/", views.enroll, name="enroll"),
+    path("enrollments/<int:pk>/edit/", views.enrollment_update, name="enrollment_update"),
+    path("enrollments/<int:pk>/delete/", views.enrollment_delete, name="enrollment_delete"),
+    path("schedule/", views.schedule, name="schedule"),
+
 ]

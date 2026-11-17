@@ -46,3 +46,194 @@ def club_list(request):
         "selected_age": selected_age,
     }
     return render(request, "center/club_list.html", context)
+
+import csv
+from django.contrib import messages
+from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.db.models import Sum
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect
+from .forms import ChildForm, EnrollmentForm, RegistrationForm
+from .models import Child, Enrollment, Parent, StudyGroup, Subscription
+from .services import enroll_child
+
+
+def _get_parent(user):
+    parent, _ = Parent.objects.get_or_create(user=user, defaults={"phone": ""})
+    return parent
+
+
+def register(request):
+    if request.method == "POST":
+        form = RegistrationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            messages.success(request, "Регистрация прошла успешно!")
+            return redirect("center:dashboard")
+    else:
+        form = RegistrationForm()
+    return render(request, "center/form.html", {"form": form, "title": "Регистрация родителя"})
+
+
+@login_required
+def dashboard(request):
+    parent = _get_parent(request.user)
+    children = parent.children.prefetch_related("enrollments__group")
+    active_subs = Subscription.objects.filter(child__parent=parent, is_active=True)
+    stats = {
+        "children": children.count(),
+        "groups": Enrollment.objects.filter(child__parent=parent, is_active=True).count(),
+        "active_subscriptions": active_subs.count(),
+        "remaining": active_subs.aggregate(total=Sum("remaining_lessons"))["total"] or 0,
+    }
+    return render(request, "center/dashboard.html", {"stats": stats, "children": children})
+
+
+@login_required
+def child_list(request):
+    parent = _get_parent(request.user)
+    queryset = parent.children.all()
+    term = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "")
+    sort = request.GET.get("sort", "last_name")
+
+    if term:
+        queryset = queryset.filter(Q(last_name__icontains=term) | Q(first_name__icontains=term))
+    if status == "enrolled":
+        queryset = queryset.filter(enrollments__is_active=True).distinct()
+    elif status == "free":
+        queryset = queryset.exclude(enrollments__is_active=True)
+
+    if sort == "first_name":
+        queryset = queryset.order_by("first_name")
+    elif sort == "-id":
+        queryset = queryset.order_by("-id")
+    else:
+        queryset = queryset.order_by("last_name", "first_name")
+
+    page = Paginator(queryset, 10).get_page(request.GET.get("page"))
+    return render(request, "center/child_list.html", {"page": page, "term": term})
+
+
+@login_required
+def child_create(request):
+    parent = _get_parent(request.user)
+    if request.method == "POST":
+        form = ChildForm(request.POST, request.FILES)
+        if form.is_valid():
+            child = form.save(commit=False)
+            child.parent = parent
+            child.save()
+            messages.success(request, "Профиль ребёнка добавлен.")
+            return redirect("center:child_list")
+    else:
+        form = ChildForm()
+    return render(request, "center/form.html", {"form": form, "title": "Добавить ребёнка"})
+
+
+@login_required
+def child_update(request, pk):
+    parent = _get_parent(request.user)
+    child = get_object_or_404(Child, pk=pk, parent=parent)
+    if request.method == "POST":
+        form = ChildForm(request.POST, request.FILES, instance=child)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Данные ребёнка обновлены.")
+            return redirect("center:child_list")
+    else:
+        form = ChildForm(instance=child)
+    return render(request, "center/form.html", {"form": form, "title": "Редактировать профиль ребёнка"})
+
+
+@login_required
+def child_delete(request, pk):
+    parent = _get_parent(request.user)
+    child = get_object_or_404(Child, pk=pk, parent=parent)
+    if request.method == "POST":
+        child.delete()
+        messages.success(request, "Профиль ребёнка удалён.")
+    return redirect("center:child_list")
+
+
+@login_required
+def export_children(request):
+    parent = _get_parent(request.user)
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="children.csv"'
+    response.write("\ufeff")
+    writer = csv.writer(response, delimiter=";")
+    writer.writerow(["Фамилия", "Имя", "Дата рождения", "Возраст"])
+    for child in parent.children.all():
+        writer.writerow([child.last_name, child.first_name, child.birth_date.strftime("%d.%m.%Y"), child.age])
+    return response
+
+
+@login_required
+def enrollment_list(request):
+    parent = _get_parent(request.user)
+    enrollments = Enrollment.objects.filter(child__parent=parent).select_related("child", "group__club", "group__age_range")
+    return render(request, "center/enrollment_list.html", {"enrollments": enrollments})
+
+
+@login_required
+def enroll(request):
+    parent = _get_parent(request.user)
+    if request.method == "POST":
+        form = EnrollmentForm(request.POST, parent=parent)
+        if form.is_valid():
+            try:
+                enroll_child(form.cleaned_data["child"], form.cleaned_data["group"])
+                messages.success(request, "Ребёнок успешно записан в группу.")
+                return redirect("center:enrollment_list")
+            except ValidationError as exc:
+                form.add_error(None, exc.message)
+    else:
+        form = EnrollmentForm(parent=parent)
+    return render(request, "center/form.html", {"form": form, "title": "Запись в учебную группу"})
+
+
+@login_required
+def enrollment_update(request, pk):
+    parent = _get_parent(request.user)
+    enrollment = get_object_or_404(Enrollment, pk=pk, child__parent=parent)
+    if request.method == "POST":
+        form = EnrollmentForm(request.POST, instance=enrollment, parent=parent)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Запись обновлена.")
+            return redirect("center:enrollment_list")
+    else:
+        form = EnrollmentForm(instance=enrollment, parent=parent)
+    return render(request, "center/form.html", {"form": form, "title": "Изменить запись"})
+
+
+@login_required
+def enrollment_delete(request, pk):
+    parent = _get_parent(request.user)
+    enrollment = get_object_or_404(Enrollment, pk=pk, child__parent=parent)
+    if request.method == "POST":
+        enrollment.delete()
+        messages.success(request, "Запись отменена.")
+    return redirect("center:enrollment_list")
+
+
+@login_required
+def schedule(request):
+    parent = _get_parent(request.user)
+    lessons = (
+        StudyGroup.objects.filter(enrollments__child__parent=parent, enrollments__is_active=True, lessons__isnull=False)
+        .values(
+            "title",
+            "lessons__starts_at",
+            "lessons__ends_at",
+            "lessons__classroom__name",
+            "lessons__topic",
+        )
+        .order_by("lessons__starts_at")
+        .distinct()
+    )
+    return render(request, "center/schedule.html", {"lessons": lessons})
