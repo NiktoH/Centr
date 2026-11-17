@@ -1,10 +1,11 @@
 from datetime import date
 from pathlib import Path
+import os
 from django import forms
 from django.core.exceptions import ValidationError
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from .models import Child, Enrollment, MedicalCertificate, Parent, StudyGroup
+from .models import Child, Enrollment, MedicalCertificate, Parent, StudyGroup, Attendance
 
 
 class RegistrationForm(UserCreationForm):
@@ -71,7 +72,7 @@ class EnrollmentForm(forms.ModelForm):
 class MedicalCertificateForm(forms.ModelForm):
     class Meta:
         model = MedicalCertificate
-        fields = ["attendance", "file", "illness_from", "illness_to", "parent_comment"]
+        fields = ("attendance", "file", "illness_from", "illness_to", "parent_comment")
         widgets = {
             "illness_from": forms.DateInput(attrs={"type": "date"}),
             "illness_to": forms.DateInput(attrs={"type": "date"}),
@@ -79,26 +80,27 @@ class MedicalCertificateForm(forms.ModelForm):
 
     def __init__(self, *args, parent=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if parent:
-            self.fields["attendance"].queryset = (
-                self.fields["attendance"].queryset
-                .filter(child__parent=parent, status="missed")
-                .exclude(certificate__isnull=False)
-            )
+        if parent is not None:
+            self.fields["attendance"].queryset = Attendance.objects.filter(
+                child__parent=parent,
+                status=Attendance.STATUS_MISSED,
+                certificate__isnull=True,
+            ).select_related("lesson__group", "child")
 
     def clean_file(self):
         uploaded = self.cleaned_data.get("file")
         if uploaded:
+            ext = os.path.splitext(uploaded.name)[1].lower()
+            if ext not in (".pdf", ".jpg", ".jpeg", ".png"):
+                raise ValidationError("Допустимы только файлы форматов PDF, JPG или PNG.")
             if uploaded.size > 8 * 1024 * 1024:
-                raise forms.ValidationError("Размер файла не должен превышать 8 МБ.")
-            if Path(uploaded.name).suffix.lower() not in {".pdf", ".jpg", ".jpeg", ".png"}:
-                raise forms.ValidationError("Допустимые форматы: PDF, JPG, PNG.")
+                raise ValidationError("Размер файла не должен превышать 8 МБ.")
         return uploaded
 
     def clean(self):
-        cleaned = super().clean()
-        start = cleaned.get("illness_from")
-        end = cleaned.get("illness_to")
+        cleaned_data = super().clean()
+        start = cleaned_data.get("illness_from")
+        end = cleaned_data.get("illness_to")
         if start and end and end < start:
-            self.add_error("illness_to", "Дата окончания болезни не может быть раньше даты начала.")
-        return cleaned
+            raise ValidationError("Дата окончания болезни не может быть раньше даты начала.")
+        return cleaned_data

@@ -2,8 +2,6 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 from . import views
 
-app_name = "center"
-
 urlpatterns = [
     path("", views.home, name="home"),
     path("clubs/", views.club_list, name="club_list"),
@@ -30,5 +28,10 @@ urlpatterns = [
     path("enrollments/<int:pk>/edit/", views.enrollment_update, name="enrollment_update"),
     path("enrollments/<int:pk>/delete/", views.enrollment_delete, name="enrollment_delete"),
     path("schedule/", views.schedule, name="schedule"),
+    path("certificates/upload/", views.certificate_create, name="certificate_create"),
+    path("staff/certificates/", views.certificate_review, name="certificate_review"),
+    path("staff/certificates/<int:pk>/<str:action>/", views.certificate_action, name="certificate_action"),
+    path("api/attendance/", views.attendance_data, name="attendance_data"),
+    path("api/groups/", views.group_catalog_json, name="group_catalog_json"),
 
 ]

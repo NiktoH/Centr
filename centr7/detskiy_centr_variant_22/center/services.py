@@ -35,34 +35,41 @@ def enroll_child(child, group):
 
 @transaction.atomic
 def approve_certificate(certificate, reviewer):
-    certificate = MedicalCertificate.objects.select_for_update().select_related(
-        "attendance__subscription"
-    ).get(pk=certificate.pk)
-    if certificate.status != "pending":
-        raise ValidationError("Эта справка уже рассмотрена.")
-    attendance = Attendance.objects.select_for_update().get(pk=certificate.attendance_id)
-    subscription = Subscription.objects.select_for_update().get(pk=attendance.subscription_id)
-    if attendance.status != "missed":
-        raise ValidationError("Вернуть занятие можно только за отмеченный пропуск.")
-    illness_days = (certificate.illness_to - certificate.illness_from).days + 1
-    attendance.status = "excused"
+    locked_cert = (
+        MedicalCertificate.objects.select_for_update()
+        .select_related("attendance", "attendance__subscription")
+        .get(pk=certificate.pk)
+    )
+    if locked_cert.status != MedicalCertificate.STATUS_PENDING:
+        raise ValidationError("Эта справка уже была проверена ранее.")
+
+    attendance = Attendance.objects.select_for_update().get(pk=locked_cert.attendance.pk)
+    attendance.status = Attendance.STATUS_EXCUSED
     attendance.save(update_fields=["status", "marked_at"])
-    subscription.remaining_lessons = min(subscription.remaining_lessons + 1, subscription.total_lessons)
-    subscription.ends_on += timedelta(days=illness_days)
-    subscription.save(update_fields=["remaining_lessons", "ends_on"])
-    certificate.status = "approved"
-    certificate.reviewed_by = reviewer
-    certificate.reviewed_at = timezone.now()
-    certificate.save(update_fields=["status", "reviewed_by", "reviewed_at"])
-    return subscription
+
+    if attendance.subscription:
+        sub = Subscription.objects.select_for_update().get(pk=attendance.subscription.pk)
+        sick_days = (locked_cert.illness_to - locked_cert.illness_from).days + 1
+        sub.remaining_lessons += 1
+        sub.ends_on = sub.ends_on + timedelta(days=sick_days)
+        sub.is_active = True
+        sub.save(update_fields=["remaining_lessons", "ends_on", "is_active"])
+
+    locked_cert.status = MedicalCertificate.STATUS_APPROVED
+    locked_cert.reviewed_by = reviewer
+    locked_cert.reviewed_at = timezone.now()
+    locked_cert.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+    return locked_cert
 
 
 @transaction.atomic
 def reject_certificate(certificate, reviewer):
-    certificate = MedicalCertificate.objects.select_for_update().get(pk=certificate.pk)
-    if certificate.status != "pending":
-        raise ValidationError("Эта справка уже рассмотрена.")
-    certificate.status = "rejected"
-    certificate.reviewed_by = reviewer
-    certificate.reviewed_at = timezone.now()
-    certificate.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+    locked_cert = MedicalCertificate.objects.select_for_update().get(pk=certificate.pk)
+    if locked_cert.status != MedicalCertificate.STATUS_PENDING:
+        raise ValidationError("Эта справка уже была проверена ранее.")
+
+    locked_cert.status = MedicalCertificate.STATUS_REJECTED
+    locked_cert.reviewed_by = reviewer
+    locked_cert.reviewed_at = timezone.now()
+    locked_cert.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+    return locked_cert

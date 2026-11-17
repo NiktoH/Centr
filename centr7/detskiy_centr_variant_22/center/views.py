@@ -1,7 +1,13 @@
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import render
-from .models import Club
+from .models import Attendance, Club
+from django.contrib.admin.views.decorators import staff_member_required
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from .forms import MedicalCertificateForm
+from .models import Attendance, MedicalCertificate
+from .services import approve_certificate, reject_certificate
 
 
 def home(request):
@@ -53,11 +59,11 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db.models import Sum
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from .forms import ChildForm, EnrollmentForm, RegistrationForm
 from .models import Child, Enrollment, Parent, StudyGroup, Subscription
-from .services import enroll_child
+from .services import approve_certificate, enroll_child, reject_certificate
 
 
 def _get_parent(user):
@@ -72,7 +78,7 @@ def register(request):
             user = form.save()
             login(request, user)
             messages.success(request, "Регистрация прошла успешно!")
-            return redirect("center:dashboard")
+            return redirect("dashboard")
     else:
         form = RegistrationForm()
     return render(request, "center/form.html", {"form": form, "title": "Регистрация родителя"})
@@ -156,7 +162,7 @@ def child_delete(request, pk):
     if request.method == "POST":
         child.delete()
         messages.success(request, "Профиль ребёнка удалён.")
-    return redirect("center:child_list")
+    return redirect("child_list")
 
 
 @login_required
@@ -205,7 +211,7 @@ def enrollment_update(request, pk):
         if form.is_valid():
             form.save()
             messages.success(request, "Запись обновлена.")
-            return redirect("center:enrollment_list")
+            return redirect("enrollment_list")
     else:
         form = EnrollmentForm(instance=enrollment, parent=parent)
     return render(request, "center/form.html", {"form": form, "title": "Изменить запись"})
@@ -218,7 +224,7 @@ def enrollment_delete(request, pk):
     if request.method == "POST":
         enrollment.delete()
         messages.success(request, "Запись отменена.")
-    return redirect("center:enrollment_list")
+    return redirect("enrollment_list")
 
 
 @login_required
@@ -237,3 +243,69 @@ def schedule(request):
         .distinct()
     )
     return render(request, "center/schedule.html", {"lessons": lessons})
+
+@login_required
+def certificate_create(request):
+    parent = _get_parent(request.user)
+    if request.method == "POST":
+        form = MedicalCertificateForm(request.POST, request.FILES, parent=parent)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Медицинская справка отправлена на проверку администратору.")
+            return redirect("dashboard")
+    else:
+        form = MedicalCertificateForm(parent=parent)
+    return render(request, "center/form.html", {"form": form, "title": "Загрузить медицинскую справку"})
+
+
+@staff_member_required
+def certificate_review(request):
+    certificates = MedicalCertificate.objects.select_related(
+        "attendance__child",
+        "attendance__lesson__group",
+        "reviewed_by",
+    )
+    return render(request, "center/certificate_review.html", {"certificates": certificates})
+
+
+@staff_member_required
+@require_POST
+def certificate_action(request, pk, action):
+    certificate = get_object_or_404(MedicalCertificate, pk=pk)
+    try:
+        if action == "approve":
+            approve_certificate(certificate, request.user)
+            messages.success(request, "Справка подтверждена, занятие возвращено на баланс абонемента.")
+        elif action == "reject":
+            reject_certificate(certificate, request.user)
+            messages.info(request, "Справка отклонена.")
+    except ValidationError as exc:
+        messages.error(request, exc.message)
+    return redirect("certificate_review")
+
+
+@login_required
+def attendance_data(request):
+    parent = _get_parent(request.user)
+    qs = Attendance.objects.filter(child__parent=parent)
+    data = {
+        "present": qs.filter(status=Attendance.STATUS_PRESENT).count(),
+        "missed": qs.filter(status=Attendance.STATUS_MISSED).count(),
+        "excused": qs.filter(status=Attendance.STATUS_EXCUSED).count(),
+    }
+    return JsonResponse(data)
+
+
+def group_catalog_json(request):
+    groups = StudyGroup.objects.filter(is_active=True).select_related("club", "age_range")
+    payload = [
+        {
+            "id": g.id,
+            "title": g.title,
+            "club": g.club.name,
+            "age_range": f"{g.age_range.min_age}–{g.age_range.max_age} лет",
+            "free_places": g.free_places,
+        }
+        for g in groups
+    ]
+    return JsonResponse({"groups": payload})

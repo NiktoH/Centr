@@ -51,3 +51,47 @@ document.addEventListener("DOMContentLoaded", () => {
             .catch(() => groupList.textContent = "Не удалось загрузить список групп.");
     }
 });
+
+document.addEventListener("DOMContentLoaded", () => {
+  const groupsContainer = document.querySelector("[data-groups-list]");
+  if (groupsContainer) {
+    fetch("/api/groups/")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.groups || data.groups.length === 0) {
+          groupsContainer.textContent = "Свободных групп сейчас нет.";
+          return;
+        }
+        groupsContainer.innerHTML = data.groups
+          .map(
+            (g) =>
+              `<div class="group-row"><strong>${g.title}</strong> (${g.club}) · ${g.age_range} · Свободно мест: ${g.free_places}</div>`
+          )
+          .join("");
+      })
+      .catch(() => {
+        groupsContainer.textContent = "Не удалось загрузить список групп.";
+      });
+  }
+
+  const chartContainer = document.querySelector("[data-attendance-chart]");
+  if (chartContainer) {
+    fetch("/api/attendance/")
+      .then((res) => res.json())
+      .then((data) => {
+        const total = data.present + data.missed + data.excused;
+        if (total === 0) {
+          chartContainer.textContent = "Пока нет отметок о посещаемости.";
+          return;
+        }
+        chartContainer.innerHTML = `
+          <div>Присутствовал: <strong>${data.present}</strong></div>
+          <div>Пропуск без причины: <strong>${data.missed}</strong></div>
+          <div>Пропуск по справке: <strong>${data.excused}</strong></div>
+        `;
+      })
+      .catch(() => {
+        chartContainer.textContent = "Ошибка загрузки статистики.";
+      });
+  }
+});
